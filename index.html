@@ -221,7 +221,7 @@ to{transform:rotate(360deg)}
 .games-grid{grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1.5rem}
 }
 @media (max-width: 768px) {
-.panic-info{display:none}
+.panic-info{display:none!important}
 nav{padding:1rem}
 .nav-links{display:none}
 .mobile-menu-btn{display:flex}
@@ -365,7 +365,7 @@ footer{background:var(--bg-secondary);border-top:1px solid var(--border);margin-
                     <div class="random-game-name" id="random-game-name">
                         Loading...
                     </div>
-                    <button class="btn btn-primary" id="play-random-btn" style="width: 100%;">
+                    <button class="btn btn-primary" id="play-random-btn">
                         <span>⚡</span>
                         <span>Play Now</span>
                     </button>
@@ -471,7 +471,7 @@ footer{background:var(--bg-secondary);border-top:1px solid var(--border);margin-
                     <li><a href="#" data-category="action">🎯 Action Games</a></li>
                     <li><a href="#" data-category="puzzle">🧩 Puzzle Games</a></li>
                     <li><a href="#" data-category="restaurant">🍕 Restaurant Games</a></li>
-               <button class="filter-chip" data-category="platformer">🕹️ Platformer</button>
+                    <li><a href="#" data-category="platformer">🕹️ Platformer</a></li>
                     <li><a href="#" data-category="strategy">♟️ Strategy Games</a></li>
                 </ul>
             </div>

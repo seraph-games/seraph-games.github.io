@@ -49,7 +49,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
     
-    <style>
+<style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--primary:#8b5cf6;--primary-dark:#7c3aed;--primary-light:#a78bfa;--secondary:#ec4899;--accent:#06b6d4;--success:#10b981;--warning:#f59e0b;--danger:#ef4444;--bg-primary:#0a0a0f;--bg-secondary:#121218;--bg-tertiary:#1a1a24;--bg-card:#1a1a24cc;--bg-glass:#8b5cf60d;--text-primary:#fff;--text-secondary:#e2e8f0;--text-muted:#94a3b8;--text-dim:#64748b;--border:#8b5cf61a;--border-hover:#8b5cf64d;--shadow-sm:0 2px 8px #0000004d;--shadow-md:0 4px 16px #0006;--shadow-lg:0 8px 32px #00000080;--shadow-xl:0 16px 64px #0009;--shadow-glow:0 0 40px #8b5cf64d;--radius-sm:8px;--radius-md:12px;--radius-lg:16px;--radius-xl:24px;--radius-2xl:32px;--transition-fast:all .15s cubic-bezier(0.4,0,0.2,1);--transition:all .3s cubic-bezier(0.4,0,0.2,1);--transition-slow:all .5s cubic-bezier(0.4,0,0.2,1)}
 html{scroll-behavior:smooth;overflow-x:hidden}
@@ -221,6 +221,7 @@ to{transform:rotate(360deg)}
 .games-grid{grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1.5rem}
 }
 @media (max-width: 768px) {
+.panic-info{display:none}
 nav{padding:1rem}
 .nav-links{display:none}
 .mobile-menu-btn{display:flex}
@@ -332,7 +333,7 @@ footer{background:var(--bg-secondary);border-top:1px solid var(--border);margin-
                         <span class="stat-label">Total Games</span>
                     </div>
                     <div class="stat-card">
-                        <span class="stat-number">6</span>
+                        <span class="stat-number">10</span>
                         <span class="stat-label">Categories</span>
                     </div>
                     <div class="stat-card">
@@ -395,7 +396,12 @@ footer{background:var(--bg-secondary);border-top:1px solid var(--border);margin-
                     <button class="filter-chip" data-category="action">🎯 Action</button>
                     <button class="filter-chip" data-category="puzzle">🧩 Puzzle</button>
                     <button class="filter-chip" data-category="restaurant">🍕 Restaurant</button>
-                 <!--   <button class="filter-chip" data-category="adventure">🗺️ Adventure</button> -->
+                    <button class="filter-chip" data-category="racing">🏎️ Racing</button>
+                    <button class="filter-chip" data-category="horror">👻 Horror</button>
+                    <button class="filter-chip" data-category="music">🎵 Music</button>
+                    <button class="filter-chip" data-category="rpg">🧙 RPG</button>
+                    <button class="filter-chip" data-category="platformer">🕹️ Platformer</button>
+                    <button class="filter-chip" data-category="fighting">🥊 Fighting</button>
                     <button class="filter-chip" data-category="strategy">♟️ Strategy</button>
                 </div>
             </div>
@@ -465,14 +471,12 @@ footer{background:var(--bg-secondary);border-top:1px solid var(--border);margin-
                     <li><a href="#" data-category="action">🎯 Action Games</a></li>
                     <li><a href="#" data-category="puzzle">🧩 Puzzle Games</a></li>
                     <li><a href="#" data-category="restaurant">🍕 Restaurant Games</a></li>
-                 <!--   <li><a href="#" data-category="adventure">🗺️ Adventure Games</a></li> -->
+               <button class="filter-chip" data-category="platformer">🕹️ Platformer</button>
                     <li><a href="#" data-category="strategy">♟️ Strategy Games</a></li>
                 </ul>
             </div>
 
             <div class="footer-section">
-                <h3>💡 Help & Support</h3>
-               
                 <div class="panic-info">
                     <span>🚨 Quick Escape:</span>
                     <span class="panic-key">`</span>

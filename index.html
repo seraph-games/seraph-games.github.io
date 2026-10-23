@@ -207,7 +207,7 @@ h1{font-size:clamp(2.2rem,8vw,5.2rem);font-weight:800;line-height:1.05;margin-bo
 .empty-state{text-align:center;padding:4rem 1.5rem;color:var(--text-muted);grid-column:1/-1}
 .empty-icon{font-size:4rem;margin-bottom:1rem;opacity:.4}
 .empty-state h3{font-size:1.5rem;margin-bottom:.5rem;color:var(--text-secondary)}
-.panic-btn{position:fixed;bottom:1.25rem;right:1.25rem;width:56px;height:56px;background:linear-gradient(135deg,var(--danger),#dc2626);border:none;border-radius:50%;color:#fff;font-size:1.5rem;cursor:pointer;box-shadow:0 8px 24px #ef444466;transition:var(--transition);z-index:900}
+.panic-btn{position:absolute;bottom:1.25rem;right:1.25rem;width:56px;height:56px;background:linear-gradient(135deg,var(--danger),#dc2626);border:none;border-radius:50%;color:#fff;font-size:1.5rem;cursor:pointer;box-shadow:0 8px 24px #ef444466;transition:var(--transition);z-index:900}
 .panic-btn:hover{transform:scale(1.12)}
 .panic-screen{display:none;position:fixed;inset:0;background:#fff;color:#202124;z-index:9000;overflow-y:auto;padding:3rem 1.5rem;font-family:Arial,sans-serif;line-height:1.9;font-size:15px}
 .panic-screen h2{font-size:1.5rem;margin-bottom:1rem}
@@ -577,9 +577,9 @@ to{opacity:1;transform:none}
     <p>&copy; <span id="currentYear"></span> Seraph Games. All rights reserved.</p>
     <p>Play responsibly and have fun! 🎉</p>
   </div>
+  <button class="panic-btn" id="panic-btn" title="Panic Mode (press ` or ESC)" aria-label="Panic Mode">🚨</button>
 </footer>
 
-<button class="panic-btn" id="panic-btn" title="Panic Mode (press ` or ESC)" aria-label="Panic Mode">🚨</button>
 
 <div class="panic-screen" id="panic-screen" aria-hidden="true">
   <button class="exit-panic-btn" id="exit-panic-btn" type="button">✕ Exit Panic Mode</button>

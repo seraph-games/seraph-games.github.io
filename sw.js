@@ -1,7 +1,10 @@
-const CACHE_NAME = 'cache-v2';
+const CACHE_NAME = 'cache-v2.1';
 const urlsToCache = [
   '/index.html',
-  '/app.js?v=2.1',
+  '/app.js?v=1.11',
+  '/games-data.js?v=1.11',
+  '/icons/icon-192x192.png',
+  '/icons/icon-512x512.png',
 ];
 
 self.addEventListener('install', event => {

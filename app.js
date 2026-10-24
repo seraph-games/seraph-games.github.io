@@ -1,4 +1,4 @@
-/* Seraph Games v1.1 - app logic. Requires games-data.js (defines `gamesData`). */
+/* Seraph Games v1.2 - app logic. Requires games-data.js (defines `gamesData`). */
 (() => {
 'use strict';
 
@@ -9,7 +9,6 @@ const SEARCH_DEBOUNCE = 200;
 const KEYS = {
   fav: 'og-favorites-v2',
   recent: 'og-recent-v1',
-  recentHidden: 'og-recent-hidden-v1',
   view: 'og-view-v1'
 };
 const CATEGORY_META = {
@@ -30,7 +29,7 @@ const FALLBACK_THUMB = 'data:image/svg+xml;utf8,' + encodeURIComponent(
   '<text x="50%" y="50%" font-size="48" text-anchor="middle" dominant-baseline="middle">🎮</text></svg>'
 );
 const SITE_URL = /^https?:$/.test(location.protocol)
-  ? location.origin + location.pathname
+  ? location.origin + location.pathname.replace(/[^/]*$/, '')
   : 'https://seraph-games.github.io/';
 const SITE_TEXT = 'Play 500+ free online games on Seraph Games!';
 const REDUCED_MOTION = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -59,6 +58,10 @@ function writeJSON(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage unavailable */ }
 }
 
+const EMBED_HOST = 'olivia-games.github.io';        // only these games run inside the on-page player
+const BASE_TITLE = document.title;
+const ROUTE_TITLES = { recent: 'Recently Played', favorites: 'Favorite Games' };
+
 /*  State  */
 const state = {
   category: 'all',
@@ -69,9 +72,10 @@ const state = {
   visible: PAGE_SIZE,
   favorites: new Set(readJSON(KEYS.fav, []).filter(id => gameById.has(id))),
   recent: readJSON(KEYS.recent, []).filter(id => gameById.has(id)).slice(0, RECENT_MAX),
-  recentDismissed: readJSON(KEYS.recentHidden, false) === true,
+  route: 'home',
   featured: null,
   modalGame: null,
+  player: null,
   rnd: { cat: 'all', current: null, seen: new Set(), history: [], spinning: false }
 };
 
@@ -83,10 +87,10 @@ const el = {
   sort: $('sort-select'),
   filters: $('filters'),
   grid: $('games-container'),
-  recentSection: $('recent'),
+  searchClear: $('search-clear'),
+  views: { home: $('view-home'), recent: $('view-recent'), favorites: $('view-favorites') },
   recentGrid: $('recent-container'),
   recentCount: $('recent-count'),
-  favSection: $('favorites'),
   favGrid: $('favorites-container'),
   favCount: $('favorites-count'),
   resultsCount: $('results-count'),
@@ -130,8 +134,8 @@ function cardHTML(g, i) {
 </article>`;
 }
 
-function emptyHTML(icon, title, text) {
-  return `<div class="empty-state"><div class="empty-icon">${icon}</div><h3>${esc(title)}</h3><p>${esc(text)}</p></div>`;
+function emptyHTML(icon, title, text, cta) {
+  return `<div class="empty-state"><div class="empty-icon">${icon}</div><h3>${esc(title)}</h3><p>${esc(text)}</p>${cta ? '<a class="btn btn-primary" href="#games">🎮 Browse games</a>' : ''}</div>`;
 }
 
 /*  Filtering / sorting / rendering  */
@@ -194,18 +198,22 @@ function loadMore() {
 }
 
 function renderRecent() {
+  if (!el.recentGrid) return;
   const list = state.recent.map(id => gameById.get(id)).filter(Boolean);
   el.recentGrid.innerHTML = list.length
     ? list.map(cardHTML).join('')
-    : emptyHTML('🕘', 'Nothing played yet', 'Games you open will show up here');
+    : emptyHTML('🕘', 'Nothing played yet', 'Games you open will show up here', true);
   el.recentCount.textContent = list.length ? plural(list.length, 'game', 'games') + ' played recently' : 'Your history is empty';
+  const clr = $('clear-history-btn');
+  if (clr) clr.hidden = !list.length;
 }
 
 function renderFavorites() {
-  const list = games.filter(g => state.favorites.has(g.id));
+  if (!el.favGrid) return;
+  const list = [...state.favorites].reverse().map(id => gameById.get(id)).filter(Boolean);   // newest first
   el.favGrid.innerHTML = list.length
     ? list.map(cardHTML).join('')
-    : emptyHTML('⭐', 'No favorites yet', 'Click the star icon on any game to add it to your favorites');
+    : emptyHTML('⭐', 'No favorites yet', 'Tap the star on any game to save it here', true);
   el.favCount.textContent = list.length ? plural(list.length, 'favorite game', 'favorite games') : 'Your starred games appear here';
 }
 
@@ -215,8 +223,7 @@ function updateBadges() {
 }
 
 function updateRecentVisibility() {
-  el.recentSection.hidden = state.recent.length === 0 || state.recentDismissed;
-  if (!el.recentSection.hidden) renderRecent();
+  if (state.route === 'recent') renderRecent();
   updateBadges();
 }
 
@@ -235,7 +242,7 @@ function toggleFavorite(id) {
     btn.setAttribute('aria-pressed', String(on));
     btn.setAttribute('aria-label', (on ? 'Remove ' : 'Add ') + name + (on ? ' from favorites' : ' to favorites'));
   });
-  if (!el.favSection.hidden) renderFavorites();
+  if (state.route === 'favorites') renderFavorites();
   updateBadges();
   syncModalFav();
   syncRandomFav();
@@ -246,63 +253,123 @@ function toggleFavorite(id) {
 function recordPlay(id) {
   if (!gameById.has(id)) return;
   state.recent = [id, ...state.recent.filter(x => x !== id)].slice(0, RECENT_MAX);
-  state.recentDismissed = false;
   writeJSON(KEYS.recent, state.recent);
-  writeJSON(KEYS.recentHidden, false);
   updateRecentVisibility();
-}
-function playGame(g) {
-  recordPlay(g.id);
-  window.open(g.url, '_blank', 'noopener');
 }
 function clearHistory() {
   state.recent = [];
-  state.recentDismissed = false;
   writeJSON(KEYS.recent, []);
-  writeJSON(KEYS.recentHidden, false);
   updateRecentVisibility();
   toast('🗑️ History cleared');
 }
-function closeRecent() {
-  state.recentDismissed = true;
-  writeJSON(KEYS.recentHidden, true);
-  updateRecentVisibility();
-  scrollToEl(el.gamesSection);
+
+/*  Game player  */
+let loadTimer = null;
+function isEmbeddable(url) {
+  try { const u = new URL(url, location.href); return u.protocol === 'https:' && u.hostname === EMBED_HOST; }
+  catch { return false; }
+}
+function launchGame(g) {
+  recordPlay(g.id);
+  if (isEmbeddable(g.url)) openPlayer(g);
+  else window.open(g.url, '_blank', 'noopener');      // other hosts: always a new tab
+}
+function mountFrame() {
+  const g = state.player;
+  if (!g) return;
+  const stage = $('player-stage');
+  const old = stage.querySelector('iframe');
+  if (old) { old.src = 'about:blank'; old.remove(); }
+  clearTimeout(loadTimer);
+  $('player-loading').hidden = false;
+  const f = document.createElement('iframe');
+  f.title = g.name;
+  f.allow = 'fullscreen; autoplay; gamepad; clipboard-write; accelerometer; gyroscope';
+  f.setAttribute('allowfullscreen', '');
+  f.referrerPolicy = 'strict-origin-when-cross-origin';
+  const done = () => { $('player-loading').hidden = true; clearTimeout(loadTimer); };
+  f.addEventListener('load', () => { done(); try { f.focus(); } catch {} });
+  loadTimer = setTimeout(done, 15000);               // never leave the spinner stuck
+  f.src = g.url;
+  stage.appendChild(f);
+}
+function openPlayer(g) {
+  $$('.modal-overlay.active').forEach(o => { if (o.id !== 'play-modal') closeOverlayByEl(o); });
+  state.player = g;
+  $('player-title').textContent = g.name;
+  $('player-newtab').href = g.url;
+  openOverlay($('play-modal'));
+  mountFrame();
+  syncFs();
+}
+function closePlayer() {
+  const stage = $('player-stage');
+  if (document.fullscreenElement || document.webkitFullscreenElement) {
+    try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch {}
+  }
+  stage.classList.remove('pseudo-fs');
+  clearTimeout(loadTimer);
+  const f = stage.querySelector('iframe');
+  if (f) { f.src = 'about:blank'; f.remove(); }       // stops sound and the game loop
+  state.player = null;
+  syncFs();
+  closeOverlay($('play-modal'));
+}
+function isFullscreen() {
+  return !!(document.fullscreenElement || document.webkitFullscreenElement) || $('player-stage').classList.contains('pseudo-fs');
+}
+let fsWas = false, fsExitAt = 0;
+function syncFs() {
+  const on = isFullscreen();
+  if (fsWas && !on) fsExitAt = Date.now();          // remembers when fullscreen just ended (see Escape handler)
+  fsWas = on;
+  $('player-fs-label').textContent = on ? 'Exit' : 'Fullscreen';
+  $('player-fs').title = on ? 'Exit fullscreen' : 'Fullscreen';
+  const use = $('player-fs-icon').querySelector('use');
+  if (use) use.setAttribute('href', on ? '#i-shrink' : '#i-expand');
+}
+function toggleFullscreen() {
+  const stage = $('player-stage');
+  if (document.fullscreenElement || document.webkitFullscreenElement) {
+    try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch {}
+    return;
+  }
+  if (stage.classList.contains('pseudo-fs')) { stage.classList.remove('pseudo-fs'); syncFs(); return; }
+  const pseudo = () => { stage.classList.add('pseudo-fs'); syncFs(); };   // iOS Safari & co: CSS fullscreen fallback
+  const req = stage.requestFullscreen || stage.webkitRequestFullscreen;
+  if (!req) { pseudo(); return; }
+  try {
+    const p = req.call(stage);
+    if (p && p.catch) p.catch(pseudo);
+  } catch { pseudo(); }
 }
 
-/*  Panels & navigation  */
+/*  Navigation  */
 function scrollToEl(node) { node && node.scrollIntoView({ behavior: REDUCED_MOTION ? 'auto' : 'smooth', block: 'start' }); }
-
-function openRecentPanel() {
-  if (!state.recent.length) { toast('No recently played games yet'); scrollToEl(el.gamesSection); return; }
-  state.recentDismissed = false;
-  writeJSON(KEYS.recentHidden, false);
-  updateRecentVisibility();
-  scrollToEl(el.recentSection);
-}
-function openFavoritesPanel() {
-  el.favSection.hidden = false;
-  renderFavorites();
-  scrollToEl(el.favSection);
-}
-function closeFavorites() {
-  el.favSection.hidden = true;
-  scrollToEl(el.gamesSection);
-}
 
 function setActiveNav(hash) {
   $$('.nav-link').forEach(l => l.classList.toggle('active', l.getAttribute('href') === hash));
 }
 
-function navigateTo(hash) {
-  switch (hash) {
-    case '#home': window.scrollTo({ top: 0, behavior: REDUCED_MOTION ? 'auto' : 'smooth' }); break;
-    case '#recent': openRecentPanel(); break;
-    case '#favorites': openFavoritesPanel(); break;
-    case '#random': openRandom(); return;
-    default: scrollToEl(document.querySelector(hash));
-  }
-  setActiveNav(hash);
+/* Recent / Favorites are views of this same page (#recent, #favorites): no catalog, just the list. */
+function routeFromHash() {
+  return location.hash === '#recent' ? 'recent' : location.hash === '#favorites' ? 'favorites' : 'home';
+}
+function showRoute(route, { scroll = true } = {}) {
+  state.route = route;
+  Object.entries(el.views).forEach(([name, node]) => { if (node) node.hidden = name !== route; });
+  document.body.dataset.route = route;
+  document.title = ROUTE_TITLES[route] ? `${ROUTE_TITLES[route]} - Seraph Games` : BASE_TITLE;
+  if (route === 'recent') renderRecent();
+  else if (route === 'favorites') renderFavorites();
+  setActiveNav(route === 'home' ? '#home' : '#' + route);
+  closeMobileMenu();
+  if (!scroll) return;
+  let id = '';
+  if (route === 'home') { try { id = decodeURIComponent(location.hash.slice(1)); } catch {} }
+  const target = id ? document.getElementById(id) : null;
+  if (target) requestAnimationFrame(() => scrollToEl(target));
+  else window.scrollTo(0, 0);
 }
 
 function setCategory(cat) {
@@ -312,6 +379,7 @@ function setCategory(cat) {
 }
 
 function buildFilters() {
+  if (!el.filters) return;
   const counts = {};
   games.forEach(g => { counts[g.category] = (counts[g.category] || 0) + 1; });
   const cats = Object.keys(CATEGORY_META).filter(c => counts[c]);
@@ -354,6 +422,7 @@ function showSuggestions() {
   el.suggestions.classList.add('active');
 }
 function hideSuggestions() { el.suggestions.classList.remove('active'); }
+function syncSearchClear() { if (el.searchClear && el.search) el.searchClear.hidden = !el.search.value; }
 
 function applySearch(value) {
   state.search = value.toLowerCase().trim();
@@ -370,7 +439,7 @@ function openOverlay(overlay) {
   overlay.classList.add('active');
   overlay.setAttribute('aria-hidden', 'false');
   if (lockCount++ === 0) document.body.style.overflow = 'hidden';
-  const focusTarget = overlay.querySelector('.modal-close');
+  const focusTarget = overlay.querySelector('.modal-close, [data-autofocus]');
   focusTarget && focusTarget.focus({ preventScroll: true });
 }
 function closeOverlay(overlay) {
@@ -384,7 +453,7 @@ function activeOverlay() { return document.querySelector('.modal-overlay.active'
 
 /*  Share  */
 const NETS = [
-  { id: 'x',        label: 'Share on X',        icon: 'i-x',        href: (u, t) => `https://twitter.com/intent/tweet?text=${enc(t)}&url=${enc(u)}` },
+  { id: 'x',        label: 'Share on X',        icon: 'i-xlogo',    fill: true, href: (u, t) => `https://x.com/intent/post?text=${enc(t)}&url=${enc(u)}` },
   { id: 'facebook', label: 'Share on Facebook', icon: 'i-facebook', href: (u)    => `https://www.facebook.com/sharer/sharer.php?u=${enc(u)}` },
   { id: 'whatsapp', label: 'Share on WhatsApp', icon: 'i-whatsapp', href: (u, t) => `https://wa.me/?text=${enc(t + ' ' + u)}` },
   { id: 'telegram', label: 'Share on Telegram', icon: 'i-telegram', href: (u, t) => `https://t.me/share/url?url=${enc(u)}&text=${enc(t)}` },
@@ -392,10 +461,10 @@ const NETS = [
   { id: 'email',    label: 'Share by email',    icon: 'i-mail',     href: (u, t) => `mailto:?subject=${enc(t)}&body=${enc(t + '\n' + u)}` }
 ];
 function renderShareRow(container, withCopy) {
-  const icon = (id) => `<svg class="icon"><use href="#${id}"/></svg>`;
+  const icon = (id, fill) => `<svg class="icon${fill ? ' fill' : ''}" aria-hidden="true"><use href="#${id}"/></svg>`;
   container.innerHTML =
     (withCopy ? `<button type="button" class="share-btn copy" data-net="copy" aria-label="Copy link">${icon('i-copy')}<span>Copy link</span></button>` : '') +
-    NETS.map(n => `<button type="button" class="share-btn" data-net="${n.id}" title="${n.label}" aria-label="${n.label}">${icon(n.icon)}</button>`).join('') +
+    NETS.map(n => `<button type="button" class="share-btn" data-net="${n.id}" title="${n.label}" aria-label="${n.label}">${icon(n.icon, n.fill)}</button>`).join('') +
     (navigator.share ? `<button type="button" class="share-btn" data-net="native" title="More options" aria-label="More share options">${icon('i-share')}</button>` : '');
 }
 function gameShareUrl(g) { return `${SITE_URL}?game=${enc(g.id)}`; }
@@ -595,7 +664,7 @@ function setRandomCategory(cat) {
 
 /*  Featured game (hero)  */
 function updateFeatured() {
-  if (!games.length || document.hidden) return;
+  if (!$('featured-thumb') || !games.length || document.hidden) return;
   let g;
   do { g = games[Math.floor(Math.random() * games.length)]; } while (games.length > 1 && state.featured && g.id === state.featured.id);
   state.featured = g;
@@ -624,7 +693,11 @@ function setPanic(on) {
     document.title = titleBackup;
   }
 }
-function closeOverlayByEl(o) { o.id === 'game-modal' ? closeGameModal() : closeOverlay(o); }
+function closeOverlayByEl(o) {
+  if (o.id === 'game-modal') closeGameModal();
+  else if (o.id === 'play-modal') closePlayer();
+  else closeOverlay(o);
+}
 function togglePanic() { setPanic(!document.body.classList.contains('panic-mode')); }
 
 /*  Mobile menu  */
@@ -649,48 +722,49 @@ function isTyping(t) { return t && (t.tagName === 'INPUT' || t.tagName === 'TEXT
 function setupEvents() {
   /* search */
   let timer;
-  el.search.addEventListener('input', (e) => {
+  el.search?.addEventListener('input', (e) => {
     clearTimeout(timer);
+    syncSearchClear();
     const v = e.target.value;
     timer = setTimeout(() => applySearch(v), SEARCH_DEBOUNCE);
   });
-  el.search.addEventListener('focus', () => { if (el.search.value.trim()) { state.search = el.search.value.toLowerCase().trim(); showSuggestions(); } });
-  el.search.addEventListener('blur', () => setTimeout(hideSuggestions, 120));
-  el.search.addEventListener('keydown', (e) => {
+  el.searchClear?.addEventListener('click', () => {
+    clearTimeout(timer);
+    el.search.value = '';
+    syncSearchClear();
+    applySearch('');
+    el.search.focus();
+  });
+  el.search?.addEventListener('focus', () => { if (el.search.value.trim()) { state.search = el.search.value.toLowerCase().trim(); showSuggestions(); } });
+  el.search?.addEventListener('blur', () => setTimeout(hideSuggestions, 120));
+  el.search?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); clearTimeout(timer); applySearch(el.search.value); hideSuggestions(); el.search.blur(); }
     else if (e.key === 'ArrowDown') { const first = el.suggestions.querySelector('[data-suggest]'); if (first) { e.preventDefault(); first.focus(); } }
   });
-  el.search.addEventListener('search', () => { if (!el.search.value) { clearTimeout(timer); applySearch(''); } });
-  el.suggestions.addEventListener('mousedown', (e) => e.preventDefault());
-  el.suggestions.addEventListener('keydown', (e) => {
+  el.search?.addEventListener('search', () => { if (!el.search.value) { clearTimeout(timer); applySearch(''); } });
+  el.suggestions?.addEventListener('mousedown', (e) => e.preventDefault());
+  el.suggestions?.addEventListener('keydown', (e) => {
     const items = $$('[data-suggest]', el.suggestions), i = items.indexOf(document.activeElement);
     if (e.key === 'ArrowDown') { e.preventDefault(); (items[i + 1] || items[0]).focus(); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); i <= 0 ? el.search.focus() : items[i - 1].focus(); }
   });
 
-  el.sort.addEventListener('change', () => { state.sort = el.sort.value; renderGames(); });
-  el.filters.addEventListener('click', (e) => {
+  el.sort?.addEventListener('change', () => { state.sort = el.sort.value; renderGames(); });
+  el.filters?.addEventListener('click', (e) => {
     const chip = e.target.closest('.filter-chip[data-category]');
     if (chip) setCategory(chip.dataset.category);
   });
 
   /* hero + panic */
-  $('explore-btn').addEventListener('click', () => scrollToEl(el.gamesSection));
-  $('random-btn').addEventListener('click', openRandom);
-  $('play-random-btn').addEventListener('click', () => { if (state.featured) playGame(state.featured); });
+  $('explore-btn')?.addEventListener('click', () => scrollToEl(el.gamesSection));
+  $('random-btn')?.addEventListener('click', openRandom);
+  $('play-random-btn')?.addEventListener('click', () => { if (state.featured) launchGame(state.featured); });
   $('panic-btn').addEventListener('click', () => setPanic(true));
   $('exit-panic-btn').addEventListener('click', () => setPanic(false));
 
   /* panels */
-  $('clear-history-btn').addEventListener('click', clearHistory);
-  $('close-recent-btn').addEventListener('click', closeRecent);
-  $('close-favorites-btn').addEventListener('click', closeFavorites);
-  el.loadMore.addEventListener('click', loadMore);
-  if ('IntersectionObserver' in window) {
-    new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting && !el.loadMore.hidden) loadMore();
-    }, { rootMargin: '600px 0px' }).observe(el.loadMore);
-  }
+  $('clear-history-btn')?.addEventListener('click', clearHistory);
+  el.loadMore?.addEventListener('click', loadMore);
 
   /* view toggle */
   $$('.view-btn').forEach(b => b.addEventListener('click', () => {
@@ -727,13 +801,25 @@ function setupEvents() {
     if (g) rndSetCurrent(g, true);
   });
 
+  /* player */
+  $('player-reload').addEventListener('click', mountFrame);
+  $('player-fs').addEventListener('click', toggleFullscreen);
+  $('player-exit').addEventListener('click', toggleFullscreen);
+  $('player-close').addEventListener('click', closePlayer);
+  document.addEventListener('fullscreenchange', syncFs);
+  document.addEventListener('webkitfullscreenchange', syncFs);
+
+  /* routing */
+  window.addEventListener('hashchange', () => showRoute(routeFromHash()));
+
   /* footer */
   $('footer-copy-btn').addEventListener('click', (e) => doCopy(SITE_URL, e.currentTarget));
   $('footer-share-url').addEventListener('focus', (e) => e.target.select());
   $$('.footer-links a[data-category]').forEach(a => a.addEventListener('click', (e) => {
     e.preventDefault();
     setCategory(a.dataset.category);
-    scrollToEl(el.gamesSection);
+    if (state.route !== 'home') location.hash = '#games';       // hashchange switches back to the catalog
+    else scrollToEl(el.gamesSection);
   }));
 
   /* mobile menu */
@@ -751,13 +837,11 @@ function setupEvents() {
     if (share) { handleShareClick(share); return; }
 
     const nav = t.closest('a[href^="#"]');
-    if (nav && nav.getAttribute('href').length > 1 && (nav.closest('header, .mobile-nav, .footer-links, .logo'))) {
-      e.preventDefault();
-      closeMobileMenu();
-      navigateTo(nav.getAttribute('href'));
-      return;
+    if (nav) {
+      const href = nav.getAttribute('href');
+      if (href === '#random') { e.preventDefault(); closeMobileMenu(); openRandom(); return; }
+      if (nav.closest('.mobile-nav')) closeMobileMenu();          // the hash change does the rest
     }
-    if (nav && nav.getAttribute('href') === '#' && nav.closest('.logo')) { e.preventDefault(); navigateTo('#home'); return; }
 
     const fav = t.closest('.favorite-btn[data-id]');
     if (fav) { toggleFavorite(fav.dataset.id); return; }
@@ -766,13 +850,21 @@ function setupEvents() {
     if (info) { const g = gameById.get(info.dataset.id); g && openGameModal(g); return; }
 
     const play = t.closest('[data-play]');
-    if (play) { if (play.getAttribute('aria-disabled') !== 'true') recordPlay(play.dataset.play); return; }   // link opens normally; just log it
+    if (play) {
+      if (play.getAttribute('aria-disabled') === 'true') { e.preventDefault(); return; }   // random modal still spinning
+      const g = gameById.get(play.dataset.play);
+      if (!g) return;
+      const modified = e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button === 1;
+      if (!modified && isEmbeddable(g.url)) { e.preventDefault(); launchGame(g); }   // our games → player modal
+      else recordPlay(g.id);                                                           // other links → the anchor opens a new tab
+      return;
+    }
 
     const sug = t.closest('[data-suggest]');
     if (sug) {
       const g = gameById.get(sug.dataset.suggest);
       hideSuggestions();
-      if (g) playGame(g);
+      if (g) launchGame(g);
       return;
     }
 
@@ -789,10 +881,15 @@ function setupEvents() {
 
     if (e.key === 'Escape') {
       if (panic) { e.preventDefault(); setPanic(false); return; }
+      if (state.player) {
+        // Esc while the game is fullscreen only leaves fullscreen; it must not also close the player
+        if (isFullscreen()) { e.preventDefault(); toggleFullscreen(); return; }
+        if (Date.now() - fsExitAt < 500) { e.preventDefault(); return; }
+      }
       const ov = activeOverlay();
       if (ov) { e.preventDefault(); closeOverlayByEl(ov); return; }
       if (el.mobileNav.classList.contains('active')) { e.preventDefault(); closeMobileMenu(); return; }
-      if (e.target === el.search || el.suggestions.classList.contains('active')) { hideSuggestions(); el.search.blur(); return; }
+      if (el.search && (e.target === el.search || el.suggestions.classList.contains('active'))) { hideSuggestions(); el.search.blur(); return; }
       if (isTyping(e.target)) return;
       e.preventDefault();
       setPanic(true);
@@ -801,8 +898,8 @@ function setupEvents() {
     if (e.key === '`' && !isTyping(e.target)) { e.preventDefault(); togglePanic(); return; }
     if (panic) return;
 
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); el.search.focus(); el.search.select(); return; }
-    if (e.key === '/' && !isTyping(e.target) && !activeOverlay()) { e.preventDefault(); el.search.focus(); return; }
+    if (el.search && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); el.search.focus(); el.search.select(); return; }
+    if (el.search && e.key === '/' && !isTyping(e.target) && !activeOverlay()) { e.preventDefault(); el.search.focus(); return; }
 
     // simple focus trap inside open modal
     if (e.key === 'Tab') {
@@ -833,58 +930,66 @@ function setupEvents() {
     requestAnimationFrame(() => {
       const y = window.scrollY;
       let current = '#home';
-      for (const id of ['home', 'categories', 'recent', 'favorites', 'games']) {
+      for (const id of ['home', 'categories', 'games']) {
         const s = $(id);
         if (s && !s.hidden && s.getBoundingClientRect().top <= 140) current = '#' + id;
       }
       el.header.classList.toggle('scrolled', y > 50);
-      setActiveNav(current);
+      if (state.route === 'home') setActiveNav(current);
       ticking = false;
     });
   }, { passive: true });
 
   /* rotate featured game only while the tab is visible */
-  setInterval(updateFeatured, 15000);
+  if ($('featured-thumb')) setInterval(updateFeatured, 15000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden && !state.featured) updateFeatured(); });
 }
 
 function applyView() {
   const list = state.view === 'list';
-  [el.grid, el.recentGrid, el.favGrid].forEach(g => g.classList.toggle('list-view', list));
+  if (el.grid) el.grid.classList.toggle('list-view', list);
   $$('.view-btn').forEach(b => b.classList.toggle('active', b.dataset.view === state.view));
 }
 
 /*  Init  */
 function init() {
+  $('currentYear').textContent = new Date().getFullYear();
+  $('footer-share-url').value = SITE_URL;
+  renderShareRow(document.querySelector('[data-share="game"]'), true);
+  renderShareRow(document.querySelector('[data-share="site"]'), false);
+  setupEvents();
+  updateBadges();
+
   if (!games.length) { el.resultsCount.textContent = 'Game list failed to load'; return; }
+  const params = new URLSearchParams(location.search);
 
   $('total-games').textContent = games.length;
   $('hero-count').textContent = games.length;
-  $('currentYear').textContent = new Date().getFullYear();
-  $('footer-share-url').value = SITE_URL;
-
   buildFilters();
-  renderShareRow(document.querySelector('[data-share="game"]'), true);
-  renderShareRow(document.querySelector('[data-share="site"]'), false);
   applyView();
-  setupEvents();
-
-  // ?search= deep link
-  const params = new URLSearchParams(location.search);
   const q = params.get('search');
-  if (q) { el.search.value = q; state.search = q.toLowerCase().trim(); }
-
-  renderGames();
-  updateRecentVisibility();
-  updateBadges();
+  if (q) { el.search.value = q; state.search = q.toLowerCase().trim(); syncSearchClear(); }
+  const cat = params.get('category');
+  if (cat && CATEGORY_META[cat] && games.some(g => g.category === cat)) setCategory(cat);
+  else renderGames();
   updateFeatured();
+  showRoute(routeFromHash(), { scroll: location.hash.length > 1 });
+
+  // keep lists in sync when another tab changes them
+  window.addEventListener('storage', (e) => {
+    if (e.key === KEYS.fav) {
+      state.favorites = new Set(readJSON(KEYS.fav, []).filter(id => gameById.has(id)));
+      if (state.route === 'favorites') renderFavorites();
+    } else if (e.key === KEYS.recent) {
+      state.recent = readJSON(KEYS.recent, []).filter(id => gameById.has(id)).slice(0, RECENT_MAX);
+      if (state.route === 'recent') renderRecent();
+    } else return;
+    updateBadges();
+  });
 
   // ?game= deep link (used by share links)
   const gid = params.get('game');
   if (gid && gameById.has(gid)) openGameModal(gameById.get(gid));
-
-  if (location.hash === '#favorites') openFavoritesPanel();
-  else if (location.hash === '#recent') openRecentPanel();
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

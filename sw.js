@@ -1,8 +1,8 @@
-const CACHE_NAME = 'cache-v2.1';
+const CACHE_NAME = 'cache-v2.2';
 const urlsToCache = [
   '/index.html',
-  '/app.js?v=1.11',
-  '/games-data.js?v=1.11',
+  '/app.js?v=1.2',
+  '/games-data.js?v=1.2',
   '/icons/icon-192x192.png',
   '/icons/icon-512x512.png',
 ];

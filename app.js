@@ -1,4 +1,4 @@
-/* Seraph Games v1.2 - app logic. Requires games-data.js (defines `gamesData`). */
+/* Seraph Games v1.3 - app logic. Requires games-data.js (defines `gamesData`). */
 (() => {
 'use strict';
 
@@ -25,13 +25,13 @@ const CATEGORY_META = {
   sports:     { icon: '⚽', label: 'Sports' }
 };
 const FALLBACK_THUMB = 'data:image/svg+xml;utf8,' + encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="225"><rect width="100%" height="100%" fill="#1a1a24"/>' +
+  '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="225"><rect width="100%" height="100%" fill="#161d35"/>' +
   '<text x="50%" y="50%" font-size="48" text-anchor="middle" dominant-baseline="middle">🎮</text></svg>'
 );
 const SITE_URL = /^https?:$/.test(location.protocol)
   ? location.origin + location.pathname.replace(/[^/]*$/, '')
   : 'https://seraph-games.github.io/';
-const SITE_TEXT = 'Play 500+ free online games on Seraph Games!';
+const SITE_TEXT = 'Play hundreds of free online games on Seraph Games!';
 const REDUCED_MOTION = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /*  Helpers  */
@@ -297,7 +297,6 @@ function openPlayer(g) {
   $$('.modal-overlay.active').forEach(o => { if (o.id !== 'play-modal') closeOverlayByEl(o); });
   state.player = g;
   $('player-title').textContent = g.name;
-  $('player-newtab').href = g.url;
   openOverlay($('play-modal'));
   mountFrame();
   syncFs();
@@ -432,10 +431,10 @@ function applySearch(value) {
 }
 
 /*  Modal helpers  */
-let lockCount = 0, lastFocus = null;
+let lockCount = 0;
 function openOverlay(overlay) {
   if (overlay.classList.contains('active')) return;
-  lastFocus = document.activeElement;
+  overlay._lf = document.activeElement;
   overlay.classList.add('active');
   overlay.setAttribute('aria-hidden', 'false');
   if (lockCount++ === 0) document.body.style.overflow = 'hidden';
@@ -447,7 +446,8 @@ function closeOverlay(overlay) {
   overlay.classList.remove('active');
   overlay.setAttribute('aria-hidden', 'true');
   if (--lockCount <= 0) { lockCount = 0; document.body.style.overflow = ''; }
-  if (lastFocus && lastFocus.focus) { try { lastFocus.focus({ preventScroll: true }); } catch {} }
+  const lf = overlay._lf; overlay._lf = null;
+  if (lf && lf.focus && document.contains(lf)) { try { lf.focus({ preventScroll: true }); } catch {} }
 }
 function activeOverlay() { return document.querySelector('.modal-overlay.active'); }
 
@@ -637,7 +637,7 @@ function rndSpin() {
   let ticks = 0, delay = 55;
   const total = 14;
   (function tick() {
-    if (!$('random-modal').classList.contains('active')) { r.spinning = false; $('rnd-spin').disabled = false; card.classList.remove('spinning'); return; }
+    if (!$('random-modal').classList.contains('active')) { r.spinning = false; $('rnd-spin').disabled = false; $('rnd-play').removeAttribute('aria-disabled'); card.classList.remove('spinning'); return; }
     if (ticks++ >= total) { finish(); return; }
     rndShow(pool[Math.floor(Math.random() * pool.length)], true);
     delay += 14;
@@ -673,6 +673,25 @@ function updateFeatured() {
   img.src = thumbOf(g);
   img.alt = `${g.name} thumbnail`;
 }
+
+/*  Install (PWA)  */
+let deferredInstall = null;
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+function syncInstallBtn() { const b = $('install-btn'); if (b) b.hidden = isStandalone(); }
+async function installApp() {
+  if (deferredInstall) {
+    const p = deferredInstall; deferredInstall = null;
+    p.prompt();
+    try { const { outcome } = await p.userChoice; if (outcome === 'accepted') toast('📲 Installing Seraph Games…'); } catch {}
+    return;
+  }
+  $('install-ios').hidden = !isIOS;
+  $('install-other').hidden = isIOS;
+  openOverlay($('install-modal'));
+}
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredInstall = e; });
+window.addEventListener('appinstalled', () => { deferredInstall = null; syncInstallBtn(); closeOverlay($('install-modal')); toast('✅ Seraph Games installed'); });
 
 /*  Panic mode  */
 let titleBackup = document.title;
@@ -758,6 +777,9 @@ function setupEvents() {
   /* hero + panic */
   $('explore-btn')?.addEventListener('click', () => scrollToEl(el.gamesSection));
   $('random-btn')?.addEventListener('click', openRandom);
+  $('install-btn')?.addEventListener('click', installApp);
+  $('install-close')?.addEventListener('click', () => closeOverlay($('install-modal')));
+  $('install-modal')?.addEventListener('click', (e) => { if (e.target.id === 'install-modal') closeOverlay($('install-modal')); });
   $('play-random-btn')?.addEventListener('click', () => { if (state.featured) launchGame(state.featured); });
   $('panic-btn').addEventListener('click', () => setPanic(true));
   $('exit-panic-btn').addEventListener('click', () => setPanic(false));
@@ -959,6 +981,7 @@ function init() {
   renderShareRow(document.querySelector('[data-share="site"]'), false);
   setupEvents();
   updateBadges();
+  syncInstallBtn();
 
   if (!games.length) { el.resultsCount.textContent = 'Game list failed to load'; return; }
   const params = new URLSearchParams(location.search);
@@ -997,6 +1020,6 @@ else init();
 
 /* Service worker (single registration) */
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
-  window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); });
+  window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
 }
 })();
